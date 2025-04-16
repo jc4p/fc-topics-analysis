@@ -671,7 +671,7 @@ def analyze_topics_with_gemini(cluster_posts, api_key=None):
     
     # Configure Gemini API
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-pro')
+    model = genai.GenerativeModel('gemini-2.5-pro-preview-03-25')
     
     # Dictionary to store topic analysis for each cluster
     cluster_topics = {}
