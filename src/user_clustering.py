@@ -123,9 +123,12 @@ def setup_environment():
 def connect_to_duckdb():
     """Create and configure a DuckDB connection."""
     conn = duckdb.connect(database=':memory:')
-    conn.execute("SET memory_limit='80%'")  # Use 80% of available RAM
+    
+    # Use absolute value instead of percentage (80% of 98GB is ~78GB)
+    conn.execute("SET memory_limit='78GB'")  # Use fixed size for memory limit
+    
     conn.execute("SET temp_directory='/tmp'")  # Set temp directory for spilling
-    conn.execute("PRAGMA threads=16")  # Use multiple threads for parallelization
+    conn.execute("PRAGMA threads=12")  # Use 12 threads (leaving 2 cores for system)
     return conn
 
 def load_farcaster_data(conn):
