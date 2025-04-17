@@ -576,9 +576,80 @@ def visualize_clusters(X, cluster_df):
     
     return viz_df
 
+def prepare_normalized_tables(conn):
+    """Prepare normalized tables needed for post retrieval."""
+    print("Preparing normalized tables for post retrieval...")
+    
+    # Create normalized views that are needed for post retrieval
+    try:
+        # Create normalized hash fields for reliable joining
+        conn.execute("""
+        CREATE OR REPLACE VIEW casts_normalized AS
+        SELECT *, 
+            LOWER(TRIM(Hash)) as hash_normalized
+        FROM casts_with_datetime
+        """)
+        
+        # Extract reaction target hash from TargetCastId
+        conn.execute("""
+        CREATE OR REPLACE VIEW reactions_normalized AS
+        SELECT 
+            *,
+            CASE 
+                WHEN POSITION(':' IN TargetCastId) > 0 
+                THEN SUBSTRING(TargetCastId, POSITION(':' IN TargetCastId) + 1)
+                ELSE TargetCastId 
+            END AS target_hash,
+            LOWER(TRIM(
+                CASE 
+                    WHEN POSITION(':' IN TargetCastId) > 0 
+                    THEN SUBSTRING(TargetCastId, POSITION(':' IN TargetCastId) + 1)
+                    ELSE TargetCastId 
+                END
+            )) AS reaction_target_normalized
+        FROM reactions_with_datetime
+        """)
+        
+        # Compute reactions per cast
+        conn.execute("""
+        CREATE OR REPLACE TABLE cast_reactions AS
+        SELECT 
+            reaction_target_normalized,
+            COUNT(*) AS total_reactions,
+            SUM(CASE WHEN ReactionType = 'Like' THEN 1 ELSE 0 END) AS likes_count,
+            SUM(CASE WHEN ReactionType = 'Recast' THEN 1 ELSE 0 END) AS recasts_count
+        FROM reactions_normalized
+        GROUP BY reaction_target_normalized
+        """)
+        
+        # Compute replies per cast
+        conn.execute("""
+        CREATE OR REPLACE TABLE cast_replies AS
+        SELECT 
+            LOWER(TRIM(
+                CASE 
+                    WHEN POSITION(':' IN ParentCastId) > 0 
+                    THEN SUBSTRING(ParentCastId, POSITION(':' IN ParentCastId) + 1)
+                    ELSE ParentCastId 
+                END
+            )) AS parent_hash_normalized,
+            COUNT(*) AS reply_count
+        FROM casts_normalized
+        WHERE ParentCastId IS NOT NULL AND ParentCastId != ''
+        GROUP BY parent_hash_normalized
+        """)
+        
+        print("  Normalized tables prepared successfully")
+    except Exception as e:
+        print(f"  Error preparing normalized tables: {e}")
+        raise
+
 def find_representative_posts(conn, cluster_df, model, device):
     """Find representative posts from each cluster for topic analysis."""
     print("Finding representative posts for each cluster...")
+    
+    # Make sure normalized tables exist (needed even when skipping steps)
+    prepare_normalized_tables(conn)
     
     # Cluster center embeddings
     centers = np.load(OUTPUT_DIR / 'clusters' / 'cluster_centers.npy')
