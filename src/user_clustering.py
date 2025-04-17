@@ -654,10 +654,26 @@ def find_representative_posts(conn, cluster_df, model, device):
         
         print(f"  Selected {len(representative_posts)} posts for cluster {cluster_id}")
     
-    # Save representative posts
-    with open(OUTPUT_DIR / 'clusters' / 'representative_posts.json', 'w') as f:
-        json.dump(cluster_posts, f, indent=2)
+    # Save representative posts - convert timestamps to strings to make JSON serializable
+    serializable_posts = {}
+    for cluster_id, posts in cluster_posts.items():
+        serializable_posts[cluster_id] = []
+        for post in posts:
+            # Create a copy of the post dict
+            serialized_post = {}
+            for key, value in post.items():
+                # Convert pandas Timestamp objects to strings
+                if isinstance(value, pd.Timestamp):
+                    serialized_post[key] = value.isoformat()
+                else:
+                    serialized_post[key] = value
+            serializable_posts[cluster_id].append(serialized_post)
     
+    # Save JSON-serializable posts
+    with open(OUTPUT_DIR / 'clusters' / 'representative_posts.json', 'w') as f:
+        json.dump(serializable_posts, f, indent=2)
+    
+    # Return the original posts (with Timestamp objects) for further processing
     return cluster_posts
 
 def analyze_topics_with_gemini(cluster_posts, api_key=None):
